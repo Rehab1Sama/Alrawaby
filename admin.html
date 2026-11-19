@@ -161,6 +161,7 @@ header{position:sticky;top:0;z-index:20;background:rgba(251,248,242,.9);backdrop
         <span class="who" id="who"></span>
         <a class="btn btn-g btn-sm" href="index.html" target="_blank">المتجر</a>
         <button class="btn btn-g btn-sm" id="refresh">تحديث</button>
+        <button class="btn btn-g btn-sm" id="chpass">كلمة المرور</button>
         <button class="btn btn-g btn-sm" id="logout">خروج</button>
       </div>
     </div>
@@ -236,6 +237,17 @@ header{position:sticky;top:0;z-index:20;background:rgba(251,248,242,.9);backdrop
       <div style="display:flex;gap:.5rem"><button class="btn btn-p" id="psave">حفظ</button><button type="button" class="btn btn-g" data-close>إلغاء</button></div>
       <button type="button" class="btn btn-r" id="pdel">حذف المنتج</button>
     </div>
+  </form>
+</div>
+
+<!-- تغيير كلمة المرور -->
+<div class="ov" id="passModal">
+  <form class="mbox" id="passForm" style="max-width:400px">
+    <h3>تغيير كلمة المرور</h3>
+    <div class="f"><label>كلمة المرور الجديدة (٨ أحرف على الأقل)</label><input class="in" type="password" id="np1" dir="ltr" minlength="8" required autocomplete="new-password"></div>
+    <div class="f"><label>أعيدي كتابتها</label><input class="in" type="password" id="np2" dir="ltr" minlength="8" required autocomplete="new-password"></div>
+    <div class="msg err" id="pmsg"></div>
+    <div class="mfoot"><button class="btn btn-p" id="psv">حفظ</button><button type="button" class="btn btn-g" data-close>إلغاء</button></div>
   </form>
 </div>
 
@@ -486,6 +498,18 @@ $("#cform").onsubmit = async e=>{
   const { error } = await db.from("rawabi_coupons").insert({ code, percent });
   if(error) return toast(/duplicate/i.test(error.message) ? "هذا الكود موجود مسبقًا" : "تعذَّر إضافة الكود");
   e.target.reset(); toast("أُضيف الكود 🌸"); loadAll();
+};
+
+/* ---------- تغيير كلمة المرور ---------- */
+$("#chpass").onclick = ()=>{ $("#passForm").reset(); $("#pmsg").textContent=""; $("#passModal").classList.add("show"); };
+$("#passForm").onsubmit = async e=>{
+  e.preventDefault();
+  if($("#np1").value !== $("#np2").value){ $("#pmsg").textContent = "كلمتا المرور غير متطابقتين"; return; }
+  $("#psv").disabled = true;
+  const { error } = await db.auth.updateUser({ password: $("#np1").value });
+  $("#psv").disabled = false;
+  if(error){ $("#pmsg").textContent = "تعذَّر التغيير: " + error.message; return; }
+  $("#passModal").classList.remove("show"); toast("تمَّ تغيير كلمة المرور 🌸");
 };
 
 /* ---------- البداية ---------- */
