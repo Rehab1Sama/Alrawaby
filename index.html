@@ -995,16 +995,24 @@ function startMoyasar(o){
   });
 }
 async function handlePaymentReturn(){
-  const p = new URLSearchParams(location.search);
-  const oid = p.get("order"); if(!oid) return;
-  const o = orders.find(x=>x.id===oid);
+  // قراءة متسامحة للرابط (ميسَّر قد يضيف المعاملات بـ ? أو &)
+  const href = decodeURIComponent(location.href);
+  const get = k => { const m = href.match(new RegExp("[?&]" + k + "=([^?&#]*)")); return m ? m[1] : ""; };
+  const oid = get("order"); if(!oid) return;
   history.replaceState(null, "", location.pathname + location.hash);
-  if(!o) return;
-  o.paymentId = p.get("id") || "";
-  o.status = p.get("status")==="paid" ? "paid" : "failed";
-  o.payMsg = p.get("message") || "";
+  let o = orders.find(x=>x.id===oid);
+  if(!o){
+    o = { id: oid, date: new Date().toLocaleDateString("ar-SA",{day:"numeric",month:"long",year:"numeric"}),
+          items: [], sub:0, disc:0, total:0, name:"", phone:"", pay:"card", status:"pending" };
+    orders.unshift(o);
+  }
+  o.paymentId = get("id");
+  o.status = get("status")==="paid" ? "paid" : "failed";
+  o.payMsg = get("message").replace(/\+/g," ");
+  if(db){
+    try{ const { data } = await db.rpc("rawabi_payment_result", { p_order: o.id, p_payment: o.paymentId, p_status: o.status }); if(data) o.status = data; }catch(e){}
+  }
   store.set("orders", orders);
-  if(db){ try{ await db.rpc("rawabi_payment_result", { p_order: o.id, p_payment: o.paymentId, p_status: o.status }); }catch(e){} }
   if(o.status==="paid"){ cart = []; coupon = null; couponPct = 0; saveCart(); }
   co.step = o.status==="paid" ? 3 : 5; co.lastId = o.id;
   renderCheckout(); open($("#coModal"));
@@ -1039,6 +1047,11 @@ function openOrders(){
 }
 
 /* ---------- تحميل الملفات بعد الدفع ---------- */
+// تحويل رابط Google Drive إلى رابط تحميل مباشر
+function directLink(u){
+  const m = String(u).match(/drive\.google\.com\/(?:file\/d\/|open\?id=|uc\?.*id=)([\w-]+)/);
+  return m ? `https://drive.google.com/uc?export=download&id=${m[1]}` : u;
+}
 async function loadDownloads(orderId, el, compact){
   if(!online || !db){ el.innerHTML = ""; return; }
   el.innerHTML = `<div class="dl-wait">جارٍ التحقق من الطلب…</div>`;
@@ -1052,7 +1065,7 @@ async function loadDownloads(orderId, el, compact){
     el.innerHTML = `<div class="dl-box">
       ${compact?"":`<b class="serif" style="font-size:1.15rem">ملفاتكِ جاهزة للتحميل</b>`}
       ${files.map(f => f.url
-        ? `<a class="btn btn-gold dl-btn" href="${f.url}" target="_blank" rel="noopener" download><svg><use href="#i-box"/></svg> تحميل: ${f.title}</a>`
+        ? `<a class="btn btn-gold dl-btn" href="${directLink(f.url)}" target="_blank" rel="noopener" download><svg><use href="#i-box"/></svg> تحميل: ${f.title}</a>`
         : `<div class="dl-wait">«${f.title}» سيصلكِ عبر واتساب قريبًا 🌿</div>`).join("")}
     </div>`;
   } else if(r.status==="not_found"){
@@ -1085,7 +1098,7 @@ $$(".reveal").forEach(el=>io.observe(el));
 async function loadProducts(){
   try{
     if(!window.supabase) throw 0;
-    db = window.supabase.createClient(CONFIG.supabaseUrl, CONFIG.supabaseKey);
+    db = window.supabase.createClient(CONFIG.supabaseUrl, CONFIG.supabaseKey, { auth: { persistSession:false, autoRefreshToken:false, detectSessionInUrl:false } });
     const { data, error } = await db.from("rawabi_products").select("*").eq("active", true).order("sort").order("created_at", { ascending:false });
     if(error) throw error;
     PRODUCTS = data.map(p=>({ id:p.id, title:p.title, cat:p.category, price:+p.price, img:p.img || "", tag:p.tag,
